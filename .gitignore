@@ -1,0 +1,23 @@
+# Visual Studio
+.vs/
+bin/
+obj/
+*.user
+*.suo
+*.userprefs
+*.nupkg
+
+# IDE
+.idea/
+.vscode/
+
+# Logs ve temp dosyalar
+logs/
+*.log
+*.tmp
+
+# Local ayar dosyalarý
+appsettings.Development.json
+
+# NuGet
+packages/

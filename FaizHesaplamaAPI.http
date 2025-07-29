@@ -1,0 +1,6 @@
+@FaizHesaplamaAPI_HostAddress = http://localhost:5182
+
+GET {{FaizHesaplamaAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using FaizHesaplamaAPI.Models;
 using System.Runtime;
 using System.Data;
+using FaizHesaplamaAPI.Dtos;
 
 namespace FaizHesaplamaAPI.Controllers
 {
@@ -41,41 +42,27 @@ namespace FaizHesaplamaAPI.Controllers
             return process;
         }
 
-        //GET PROCESS BY DATE:
-        //[HttpGet("GetProcessByDate")]
-        //public async Task<ActionResult<Models.Process>> GetProcessByDate([FromQuery] string firstDate, [FromQuery] string lastDate)
-        //{
-        //    if (!DateOnly.TryParse(firstDate, out var firstDayParsed) || !DateOnly.TryParse(lastDate, out var lastDayParsed))
-        //    {
-        //        return BadRequest("Invalid date format , try 'dd.MM.yyyy' or 'yyyy-MM-dd' ");
-        //    }
+        // Fix for CS0120: An object reference is required for the non-static field, method, or property 'CreateProcessDto.faizOrani'
 
-        //    var process = await _context.Process
-        //        .FirstOrDefaultAsync(p => p.ilkTarih == firstDayParsed || p.sonTarih == lastDayParsed);
-
-        //    if (process == null)
-        //    {
-        //        return NotFound(new { message = "Process not found for the given date" });
-        //    }
-
-        //    return Ok(process);
-
-        //}
-
-
-        //POST: api/process
         [HttpPost]
-        public async Task<ActionResult<Process>> CreateProcess([FromBody] Process process)
+        public async Task<ActionResult<Process>> CreateProcess([FromBody] CreateProcessDto createProcessDto)
         {
             if (!ModelState.IsValid)
             {
                 return BadRequest(ModelState);
             }
 
-            _context.Process.Add(process);
+            var newProcess = new Process
+            {
+                ilkTarih = DateOnly.Parse(createProcessDto.ilkTarih),
+                sonTarih = string.IsNullOrEmpty(createProcessDto.sonTarih) ? null : DateOnly.Parse(createProcessDto.sonTarih),
+                faizOrani = createProcessDto.faizOrani
+            };
+
+            _context.Process.Add(newProcess);
             await _context.SaveChangesAsync();
 
-            return CreatedAtAction(nameof(GetProcessById), new { id = process.id }, process);
+            return CreatedAtAction(nameof(GetProcessById), new { id = newProcess.id }, newProcess);
         }
 
 

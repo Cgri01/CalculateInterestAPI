@@ -11,6 +11,7 @@ namespace FaizHesaplamaAPI.Data
 
         public DbSet<Models.Information> Information { get; set; }
         public DbSet<Models.Process> Process { get; set; }
+        public DbSet<Models.Users> Users { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {

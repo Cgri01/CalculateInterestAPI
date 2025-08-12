@@ -17,6 +17,9 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 //FaizHesaplamaService'i tanýtma:
 builder.Services.AddScoped<FaizHesaplamaService>();
 
+// DynamicExcelProcessingService'i tanýtma:
+builder.Services.AddScoped<DynamicExcelProcessor>();
+
 // Add services to the container.
 
 builder.Services.AddControllers();

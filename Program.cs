@@ -1,4 +1,4 @@
-    using Microsoft.AspNetCore.Builder;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.EntityFrameworkCore;
 using FaizHesaplamaAPI.Data;
 using FaizHesaplamaAPI.Services;
@@ -19,6 +19,14 @@ builder.Services.AddScoped<FaizHesaplamaService>();
 
 // DynamicExcelProcessingService'i tanýtma:
 builder.Services.AddScoped<DynamicExcelProcessor>();
+
+// EmailService tanýtma
+builder.Services.AddScoped<IEmailService , EmailService>();
+
+// VerificationService Tanýtma
+//builder.Services.AddScoped<IVerificationService , VerificationService>(); AddScoped: Her API isteðine yeni servis oluþturur , dogrulama koduna farklý instance , kayýt ol'a farklý instance olusturdugu için kod eþleþmesi yapýlamýyordu. Dictionary her seferinde sýfýrlanýyordu
+builder.Services.AddSingleton<IVerificationService, VerificationService>(); //AddSingleton: Tüm uygulama boyunca tek verificationService kullanýlýyor , Dict sabit kalýyor , kod gönderilirken ve kayýt yapýlýrken ayný dicte eriþiyor.
+
 
 // Add services to the container.
 

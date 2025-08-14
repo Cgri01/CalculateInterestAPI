@@ -2,6 +2,7 @@
 using FaizHesaplamaAPI.Data;
 using FaizHesaplamaAPI.Models;
 using FaizHesaplamaAPI.Dtos;
+using FaizHesaplamaAPI.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using System.Security.Claims;
@@ -17,11 +18,15 @@ namespace FaizHesaplamaAPI.Controllers
     {
         private readonly AppDbContext _context;
         private readonly IConfiguration _config;
+        private readonly IEmailService _emailService;
+        private readonly IVerificationService _verificationService; 
 
-        public UsersController(AppDbContext context, IConfiguration config)
+        public UsersController(AppDbContext context, IConfiguration config , IEmailService emailService , IVerificationService verificationService)
         {
             _context = context;
             _config = config;
+            _emailService = emailService;
+            _verificationService = verificationService;
         }
 
         //GET ALL USERS:
@@ -54,24 +59,145 @@ namespace FaizHesaplamaAPI.Controllers
             return Ok(showInfo);
         }
 
-        // POST USER (Register):
+        //POST USER REGISTER WITH EMAIL VERIFICATION CODE
+
+
+
+        [HttpPost("request-verification")]
+        public async Task<IActionResult> RequestVerificationCode([FromBody] VerificationRequestDto request)
+        {
+            if (!IsValidEmail(request.email)) {
+                return BadRequest(new {message = "Invalid Email format" });
+            }
+
+            if (await _context.Users.AnyAsync(u => u.email == request.email))
+            {
+                return BadRequest(new { message = "Bu email zaten kullanımda" });
+            }
+
+            var verificationCode = _verificationService.GenerateVerificationCode();
+            _verificationService.StoreVerificationCode(request.email, verificationCode);
+
+            await _emailService.SendVerificationCodeAsync(request.email, verificationCode);
+            return Ok(new { message = "Doğrulama Kodu email adresinize gönderildi" });
+
+        }
 
         [HttpPost("register")]
-        public async Task<ActionResult> Register(RegisterDto register)
+        public async Task<IActionResult> Register([FromBody] RegisterDto register)
         {
+            if (!_verificationService.VerifyCode(register.email, register.VerificationCode)) // Use the injected _verificationService instance
+            {
+                return BadRequest(new { message = "Geçersiz veya süresi dolmuş doğrulama kodu" });
+            }
+            if (await _context.Users.AnyAsync(u => u.email == register.email))
+            {
+                return BadRequest(new { message = "Bu email zaten kullanımda" });
+            }
             string hashedPassword = BCrypt.Net.BCrypt.HashPassword(register.password);
             var user = new Users
             {
                 name = register.name,
                 surname = register.surname,
                 email = register.email,
-                passwordHash = hashedPassword, //sifrelenmis sifreyi passwordHash'e atamak
-                role = "User"
+                passwordHash = hashedPassword,
+                role = "User", // Default 
+                emailVerified = true
             };
+
             _context.Users.Add(user);
             await _context.SaveChangesAsync();
-            return Ok(new { message = "Register successfull" });
+
+            return Ok(new { message = "Kayıt başarılı" });
         }
+        
+        private bool IsValidEmail(string email)
+        {
+            try
+            {
+                var addr = new System.Net.Mail.MailAddress(email);
+                return addr.Address == email;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        public class VerificationRequestDto
+        {
+            public string email { get; set; }
+        }
+
+
+
+        ////POST USER REGISTER IF USER EXIST OR NOT
+        //[HttpPost("register")]
+        //public async Task<ActionResult> Register(RegisterDto register)
+        //{
+        //    if (!IsValidEmail(register.email))
+        //    {
+        //        return BadRequest(new { message = "Invalid Email format" });
+
+        //    }
+
+        //    // Check if email already exist
+        //    if (await _context.Users.AnyAsync(u => u.email == register.email))
+        //    {
+        //        return BadRequest(new { message = "Email already in use!" });
+
+        //    }
+
+        //    string hashedPasword = BCrypt.Net.BCrypt.HashPassword(register.password);
+        //    var user = new Users
+        //    {
+        //        name = register.name,
+        //        surname = register.surname,
+        //        email = register.email,
+        //        passwordHash = hashedPasword,
+        //        role = ""
+        //    };
+        //    _context.Users.Add(user);
+        //    await _context.SaveChangesAsync();
+        //    return Ok(new { message = "Register Successfull" });
+
+        //}
+
+        //private bool IsValidEmail(string email)
+        //{
+        //    try
+        //    {
+        //        var addr = new System.Net.Mail.MailAddress(email);
+        //        return addr.Address == email;
+
+        //    }
+        //    catch
+        //    {
+        //        return false;
+        //    }
+        //}
+
+
+
+
+        // POST USER (Register):
+
+        //[HttpPost("register")]
+        //public async Task<ActionResult> Register(RegisterDto register)
+        //{
+        //    string hashedPassword = BCrypt.Net.BCrypt.HashPassword(register.password);
+        //    var user = new Users
+        //    {
+        //        name = register.name,
+        //        surname = register.surname,
+        //        email = register.email,
+        //        passwordHash = hashedPassword, //sifrelenmis sifreyi passwordHash'e atamak
+        //        role = "User"
+        //    };
+        //    _context.Users.Add(user);
+        //    await _context.SaveChangesAsync();
+        //    return Ok(new { message = "Register successfull" });
+        //}
 
         //LOGIN
 
@@ -108,7 +234,7 @@ namespace FaizHesaplamaAPI.Controllers
 
             var token = new JwtSecurityToken(
                 claims: claims,
-                expires: DateTime.Now.AddDays(1), //Token 1 gün geçerli olacak
+                expires: DateTime.Now.AddHours(3), //Token 3 saat geçerli olacak
                 signingCredentials: creds
                 );
             var jwt = new JwtSecurityTokenHandler().WriteToken(token);
@@ -134,13 +260,13 @@ namespace FaizHesaplamaAPI.Controllers
             await _context.SaveChangesAsync();
             return Ok(new { message = "Kullanici bilgileri guncellendi!" });
         }
-
-        //PUT UPDATE PASSWORD:
+        //PUT UPDATE PASSWORD BY EMAIL:
         [HttpPut("updatePassword")]
         public async Task<ActionResult> UpdatePassword(UpdatePasswordDto update)
         {
-            var user = await _context.Users.FindAsync(update.id);
-            if (user == null)
+            var user = await _context.Users.FirstOrDefaultAsync(u => u.email == update.email);
+            var userId = user?.id;
+            if (userId == null)
             {
                 return NotFound("Kullanici bulunamadi!");
             }
@@ -151,7 +277,26 @@ namespace FaizHesaplamaAPI.Controllers
             user.passwordHash = BCrypt.Net.BCrypt.HashPassword(update.newPassword);
             await _context.SaveChangesAsync();
             return Ok(new { message = "Sifre guncellendi!" });
+
         }
+
+        //PUT UPDATE PASSWORD: 
+        //[HttpPut("updatePassword")]
+        //public async Task<ActionResult> UpdatePassword(UpdatePasswordDto update)
+        //{
+        //    var user = await _context.Users.FindAsync(update.id);
+        //    if (user == null)
+        //    {
+        //        return NotFound("Kullanici bulunamadi!");
+        //    }
+        //    if (!BCrypt.Net.BCrypt.Verify(update.oldPassword, user.passwordHash))
+        //    {
+        //        return BadRequest("Eski sifre yanlis!");
+        //    }
+        //    user.passwordHash = BCrypt.Net.BCrypt.HashPassword(update.newPassword);
+        //    await _context.SaveChangesAsync();
+        //    return Ok(new { message = "Sifre guncellendi!" });
+        //}
 
         //DELETE USER:
         [HttpDelete("{id}")]
